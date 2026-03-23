@@ -3,36 +3,6 @@
 
 import PackageDescription
 
-#if HuggingFace && DePasquale
-#error("Exactly one back end can be specified")
-#endif
-
-var extras = [PackageDescription.Package.Dependency]()
-
-#if SDKTest
-extras.append(
-    .package(
-        path: "SDKTest"
-    ),
-)
-#endif
-
-#if HuggingFace
-extras.append(
-    .package(
-        path: "integration/huggingface"
-    ),
-)
-#endif
-
-#if DePasquale
-extras.append(
-    .package(
-        path: "integration/depasquale"
-    ),
-)
-#endif
-
 let package = Package(
     name: "mlx-swift-lm",
     platforms: [
@@ -60,8 +30,17 @@ let package = Package(
         .trait(name: "HuggingFace"),
         .trait(name: "DePasquale"),
     ],
-    dependencies: extras + [
+    dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.30.6")),
+        .package(
+            path: "SDKTest"
+        ),
+        .package(
+            path: "integrations/depasquale"
+        ),
+        .package(
+            path: "integrations/huggingface"
+        ),
     ],
     targets: [
         .target(
