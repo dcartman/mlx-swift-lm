@@ -26,7 +26,7 @@ let package = Package(
             targets: ["MLXEmbedders"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/PrismML-Eng/mlx-swift", branch: "prism"),
+        .package(url: "https://github.com/PrismML-Eng/mlx-swift", branch: "prism"),
         .package(
             url: "https://github.com/huggingface/swift-transformers",
             .upToNextMinor(from: "1.2.0")
