@@ -16,11 +16,11 @@ private func create<C: Codable, M>(
 
 /// Registry of model type, e.g 'llama', to functions that can instantiate the model from configuration.
 ///
-/// Typically called via ``LLMModelFactory/load(from:configuration:progressHandler:)``.
+/// Typically called via ``LLMModelFactory/loadContainer(from:using:configuration:useLatest:progressHandler:)``.
 public enum LLMTypeRegistry {
 
     /// Shared instance with default model types.
-    public static let shared: ModelTypeRegistry = .init(creators: [
+    public static let shared: ModelTypeRegistry<LanguageModel> = .init(creators: [
         "mistral": create(LlamaConfiguration.self, LlamaModel.init),
         "llama": create(LlamaConfiguration.self, LlamaModel.init),
         "phi": create(PhiConfiguration.self, PhiModel.init),
@@ -31,6 +31,8 @@ public enum LLMTypeRegistry {
         "gemma3": create(Gemma3TextConfiguration.self, Gemma3TextModel.init),
         "gemma3_text": create(Gemma3TextConfiguration.self, Gemma3TextModel.init),
         "gemma3n": create(Gemma3nTextConfiguration.self, Gemma3nTextModel.init),
+        "gemma4": create(Gemma4Configuration.self, Gemma4Model.init),
+        "gemma4_text": create(Gemma4TextConfiguration.self, Gemma4TextModel.init),
         "qwen2": create(Qwen2Configuration.self, Qwen2Model.init),
         "qwen3": create(Qwen3Configuration.self, Qwen3Model.init),
         "qwen3_moe": create(Qwen3MoEConfiguration.self, Qwen3MoEModel.init),
@@ -71,9 +73,11 @@ public enum LLMTypeRegistry {
         "nanochat": create(NanoChatConfiguration.self, NanoChatModel.init),
         "nemotron_h": create(NemotronHConfiguration.self, NemotronHModel.init),
         "afmoe": create(AfMoEConfiguration.self, AfMoEModel.init),
-        "jamba_3b": create(JambaConfiguration.self, JambaModel.init),
+        "jamba": create(JambaConfiguration.self, JambaModel.init),
         "mistral3": create(Mistral3TextConfiguration.self, Mistral3TextModel.init),
         "apertus": create(ApertusConfiguration.self, ApertusModel.init),
+        "nemotron_labs_diffusion": create(
+            NemotronLabsDiffusionConfiguration.self, NemotronLabsDiffusionModel.init),
     ])
 }
 
@@ -183,6 +187,18 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
         extraEOSTokens: ["<end_of_turn>"]
     )
 
+    static public let gemma4_e4b_it_4bit = ModelConfiguration(
+        id: "mlx-community/gemma-4-e4b-it-4bit",
+        defaultPrompt: "What is the difference between a fruit and a vegetable?",
+        extraEOSTokens: ["<turn|>"]
+    )
+
+    static public let gemma4_e2b_it_4bit = ModelConfiguration(
+        id: "mlx-community/gemma-4-e2b-it-4bit",
+        defaultPrompt: "What is the difference between a fruit and a vegetable?",
+        extraEOSTokens: ["<turn|>"]
+    )
+
     static public let qwen205b4bit = ModelConfiguration(
         id: "mlx-community/Qwen1.5-0.5B-Chat-4bit",
         defaultPrompt: "why is the sky blue?"
@@ -220,6 +236,16 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
 
     static public let qwen3MoE_30b_a3b_4bit = ModelConfiguration(
         id: "mlx-community/Qwen3-30B-A3B-4bit",
+        defaultPrompt: "Why is the sky blue?"
+    )
+
+    static public let qwen3_5_2b_4bit = ModelConfiguration(
+        id: "mlx-community/Qwen3.5-2B-4bit",
+        defaultPrompt: "Why is the sky blue?"
+    )
+
+    static public let qwen3_6_27b_4bit = ModelConfiguration(
+        id: "mlx-community/Qwen3.6-27B-4bit",
         defaultPrompt: "Why is the sky blue?"
     )
 
@@ -347,9 +373,14 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
         defaultPrompt: "Why is the sky blue?"
     )
 
-    static public let jamba_3b = ModelConfiguration(
-        id: "mlx-community/AI21-Jamba-Reasoning-3B-bf16",
+    static public let jamba_3b_4bit = ModelConfiguration(
+        id: "mlx-community/AI21-Jamba-Reasoning-3B-4bit",
         defaultPrompt: ""
+    )
+
+    static public let nemotron_labs_diffusion_3b_4bit = ModelConfiguration(
+        id: "mlx-community/Nemotron-Labs-Diffusion-3B-4bit",
+        defaultPrompt: "Explain quaternions."
     )
 
     private static func all() -> [ModelConfiguration] {
@@ -364,6 +395,8 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
             gemma3n_E2B_it_lm_bf16,
             gemma3n_E4B_it_lm_4bit,
             gemma3n_E2B_it_lm_4bit,
+            gemma4_e4b_it_4bit,
+            gemma4_e2b_it_4bit,
             granite3_3_2b_4bit,
             granite_4_0_h_tiny_4bit_dwq,
             llama3_1_8B_4bit,
@@ -384,6 +417,8 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
             qwen3_4b_4bit,
             qwen3_8b_4bit,
             qwen3MoE_30b_a3b_4bit,
+            qwen3_5_2b_4bit,
+            qwen3_6_27b_4bit,
             smolLM_135M_4bit,
             deepseek_r1_4bit,
             mimo_7b_sft_4bit,
@@ -402,7 +437,8 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
             lfm2_8b_a1b_3bit_mlx,
             nanochat_d20_mlx,
             gpt_oss_20b_MXFP4_Q8,
-            jamba_3b,
+            jamba_3b_4bit,
+            nemotron_labs_diffusion_3b_4bit,
         ]
     }
 
@@ -456,9 +492,14 @@ private struct LLMUserInputProcessor: UserInputProcessor {
 /// let modelContainer = try await LLMModelFactory.shared.loadContainer(
 ///     configuration: LLMRegistry.llama3_8B_4bit)
 /// ```
-public final class LLMModelFactory: ModelFactory {
+public final class LLMModelFactory: GenericModelFactory {
 
-    public init(typeRegistry: ModelTypeRegistry, modelRegistry: AbstractModelRegistry) {
+    public typealias ContextType = ModelContext
+    public typealias ContainerType = ModelContainer
+
+    public init(
+        typeRegistry: ModelTypeRegistry<LanguageModel>, modelRegistry: AbstractModelRegistry
+    ) {
         self.typeRegistry = typeRegistry
         self.modelRegistry = modelRegistry
     }
@@ -468,7 +509,7 @@ public final class LLMModelFactory: ModelFactory {
         typeRegistry: LLMTypeRegistry.shared, modelRegistry: LLMRegistry.shared)
 
     /// registry of model type, e.g. configuration value `llama` -> configuration and init methods
-    public let typeRegistry: ModelTypeRegistry
+    public let typeRegistry: ModelTypeRegistry<LanguageModel>
 
     /// registry of model id to configuration, e.g. `mlx-community/Llama-3.2-3B-Instruct-4bit`
     public let modelRegistry: AbstractModelRegistry
@@ -520,7 +561,8 @@ public final class LLMModelFactory: ModelFactory {
         var mutableConfiguration = configuration
         mutableConfiguration.eosTokenIds = eosTokenIds
         if mutableConfiguration.toolCallFormat == nil {
-            mutableConfiguration.toolCallFormat = ToolCallFormat.infer(from: baseConfig.modelType)
+            mutableConfiguration.toolCallFormat = ToolCallFormat.infer(
+                from: baseConfig.modelType, configData: configData)
         }
 
         // Load tokenizer and weights in parallel

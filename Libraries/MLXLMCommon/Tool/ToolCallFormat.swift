@@ -79,8 +79,12 @@ public enum ToolCallFormat: String, Sendable, Codable, CaseIterable {
     case glm4
 
     /// Gemma function call format.
-    /// Example: `call:name{key:value,k:<escape>str<escape>}`
+    /// Example: `<start_function_call>call:name{key:value,k:<escape>str<escape>}<end_function_call>`
     case gemma
+
+    /// Gemma4 function call format.
+    /// Example: `<|tool_call>call:name{key:<|"|>value<|"|>}<tool_call|>`
+    case gemma4
 
     /// Kimi K2 format with functions prefix.
     /// Example: `functions.name:0<|tool_call_argument_begin|>{"key": "value"}`
@@ -93,6 +97,10 @@ public enum ToolCallFormat: String, Sendable, Codable, CaseIterable {
     /// Mistral V11+ format with [TOOL_CALLS] and [ARGS] delimiters.
     /// Example: `[TOOL_CALLS]get_weather [ARGS]{"location": "Tokyo"}`
     case mistral
+
+    /// Llama 3 inline JSON format.
+    /// Example: `<|python_tag|>{ "name": "func", "parameters": {...} }`
+    case llama3
 
     // MARK: - Factory Methods
 
@@ -110,13 +118,20 @@ public enum ToolCallFormat: String, Sendable, Codable, CaseIterable {
         case .glm4:
             return GLM4ToolCallParser()
         case .gemma:
-            return GemmaFunctionParser()
+            return GemmaFunctionParser(
+                startTag: "<start_function_call>", endTag: "<end_function_call>",
+                escapeMarker: "<escape>")
+        case .gemma4:
+            return GemmaFunctionParser(
+                startTag: "<|tool_call>", endTag: "<tool_call|>", escapeMarker: "<|\"|>")
         case .kimiK2:
             return KimiK2ToolCallParser()
         case .minimaxM2:
             return MiniMaxM2ToolCallParser()
         case .mistral:
             return MistralToolCallParser()
+        case .llama3:
+            return Llama3ToolCallParser()
         }
     }
 
@@ -125,10 +140,34 @@ public enum ToolCallFormat: String, Sendable, Codable, CaseIterable {
     /// This method maps known model types to their corresponding tool call formats,
     /// enabling automatic format detection when loading models.
     ///
-    /// - Parameter modelType: The `model_type` value from config.json
+    /// - Parameters:
+    ///   - modelType: The `model_type` value from config.json
+    ///   - configData: The raw config.json data for inspecting secondary signals (e.g. `rope_scaling` for Llama 3)
     /// - Returns: The appropriate `ToolCallFormat`, or `nil` to use the default format
-    public static func infer(from modelType: String) -> ToolCallFormat? {
+    public static func infer(from modelType: String, configData: Data? = nil) -> ToolCallFormat? {
         let type = modelType.lowercased()
+
+        // Llama family (need secondary signal for Llama 3 vs 1/2)
+        if type == "llama" {
+            guard let data = configData,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+
+            // Secondary signal 1: vocab_size >= 128000 (Llama 3 uses 128256, Llama 2 uses 32000)
+            if let vocabSize = json["vocab_size"] as? Int, vocabSize >= 128000 {
+                return .llama3
+            }
+
+            // Secondary signal 2: rope_scaling with rope_type == "llama3"
+            if let ropeScaling = json["rope_scaling"] as? [String: Any],
+                let ropeType = ropeScaling["rope_type"] as? String,
+                ropeType == "llama3"
+            {
+                return .llama3
+            }
+
+            return nil
+        }
 
         // LFM2 family (lfm2, lfm2_moe, lfm2_5, lfm25, etc.)
         if type.hasPrefix("lfm2") {
@@ -138,6 +177,11 @@ public enum ToolCallFormat: String, Sendable, Codable, CaseIterable {
         // GLM4 family (glm4, glm4_moe, glm4_moe_lite, etc.)
         if type.hasPrefix("glm4") {
             return .glm4
+        }
+
+        // Gemma4
+        if type.hasPrefix("gemma4") {
+            return .gemma4
         }
 
         // Gemma
@@ -152,6 +196,11 @@ public enum ToolCallFormat: String, Sendable, Codable, CaseIterable {
 
         // Qwen3.5 family (qwen3_5, qwen3_5_moe, etc.)
         if type.hasPrefix("qwen3_5") {
+            return .xmlFunction
+        }
+
+        // Qwen3-Next family (qwen3_next, etc.)
+        if type.hasPrefix("qwen3_next") {
             return .xmlFunction
         }
 

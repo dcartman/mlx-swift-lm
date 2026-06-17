@@ -408,7 +408,8 @@ private enum Language {
 
             Bx = concatenated([state!, Bx], axis: -2)
             if let cache {
-                cache[0] = Bx[0..., (Bx.dim(1) - (lCache - 1))..., 0...]
+                cache[0] = contiguous(Bx[0..., (Bx.dim(1) - (lCache - 1))..., 0...])
+                cache.advance(x.dim(1))
             }
 
             let convOut = conv(Bx)
@@ -570,7 +571,7 @@ private enum Language {
                 var sanitizedParam = param
 
                 if name.contains("conv.weight") {
-                    if param.shape[param.shape.count - 1] > param.shape[1] {
+                    if param.shape[param.shape.count - 1] > param.dim(1) {
                         sanitizedParam = param.transposed(0, 2, 1)
                     }
                 }
@@ -1033,7 +1034,9 @@ public class LFM2VL: Module, VLMModel, KVCacheDimensionProvider {
             pixelAttentionMask: pixelAttentionMask
         )
 
-        let result = languageModel(nil, cache: cache, inputsEmbeds: inputEmbeddings)
+        let result = withPreparedCache(cache, lengths: input.text.sequenceLengths) {
+            languageModel(nil, cache: cache, inputsEmbeds: inputEmbeddings)
+        }
 
         return .logits(result)
     }
@@ -1075,7 +1078,7 @@ public class LFM2VL: Module, VLMModel, KVCacheDimensionProvider {
             // Handle conv weight transposition
             var value = v
             if newKey.contains("conv.weight") {
-                if v.shape[v.shape.count - 1] > v.shape[1] {
+                if v.shape[v.shape.count - 1] > v.dim(1) {
                     value = v.transposed(0, 2, 1)
                 }
             }

@@ -6,6 +6,7 @@ import MLXLLM
 import MLXLMCommon
 import Testing
 
+@Suite(.serialized)
 struct SpeculativeDecodingTests {
 
     let processor: any UserInputProcessor
@@ -26,6 +27,18 @@ struct SpeculativeDecodingTests {
         )
 
         let mainModel = Gemma3TextModel(modelConfig)
+
+        // on hardware with a NAX, float32 (the default dtype) runs
+        // in tf32 in batch mode and float32 in non-batch.  this
+        // change in behavior can cause issues with prediction and
+        // doesn't match real world behavior (where float32 is not used)
+        mainModel.apply {
+            if $0.dtype == .float32 {
+                $0.asType(.float16)
+            } else {
+                $0
+            }
+        }
         let mainContext = ModelContext(
             configuration: processor.configuration,
             model: mainModel,
@@ -34,6 +47,13 @@ struct SpeculativeDecodingTests {
         )
 
         let draftModel = Gemma3TextModel(modelConfig)
+        draftModel.apply {
+            if $0.dtype == .float32 {
+                $0.asType(.float16)
+            } else {
+                $0
+            }
+        }
         let draftContext = ModelContext(
             configuration: processor.configuration,
             model: draftModel,
