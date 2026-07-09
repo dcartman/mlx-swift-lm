@@ -17,6 +17,14 @@ public protocol BaseLanguageModel: Module {
     func sanitize(weights: [String: MLXArray], metadata: [String: String]) -> [String: MLXArray]
 }
 
+/// Optional metadata a model wants written into converted safetensors.
+///
+/// Model-specific metadata lets future loaders distinguish transformed MLX-native
+/// checkpoints from original upstream checkpoints without relying only on tensor shapes.
+public protocol ModelConversionMetadataProvider {
+    var modelConversionMetadata: [String: String] { get }
+}
+
 extension BaseLanguageModel {
     public func sanitize(weights: [String: MLXArray]) -> [String: MLXArray] {
         weights
@@ -104,13 +112,16 @@ public struct LMInput {
 
         /// Concatenated pixels from one or more images
         public let pixels: MLXArray
+        /// Optional per-patch position ids for encoder-free vision embedders.
+        public let positionIds: MLXArray?
         /// Time, height, and width of the images
         public let frames: [THW]?
 
         public init(
-            pixels: MLXArray, frames: [THW]? = nil
+            pixels: MLXArray, positionIds: MLXArray? = nil, frames: [THW]? = nil
         ) {
             self.pixels = pixels
+            self.positionIds = positionIds
             self.frames = frames
         }
     }
@@ -120,25 +131,30 @@ public struct LMInput {
     public struct ProcessedVideo {
 
         public let pixels: MLXArray
+        public let positionIds: MLXArray?
         public let frames: [THW]?
 
         public init(
-            pixels: MLXArray, frames: [THW]? = nil
+            pixels: MLXArray, positionIds: MLXArray? = nil, frames: [THW]? = nil
         ) {
             self.pixels = pixels
+            self.positionIds = positionIds
             self.frames = frames
         }
     }
 
-    /// Representation of prepared input audio(s).
+    /// Representation of prepared audio features.
     public struct ProcessedAudio {
+        public let features: MLXArray
+        public let mask: MLXArray?
 
-        public let samples: MLXArray
+        public init(features: MLXArray, mask: MLXArray? = nil) {
+            self.features = features
+            self.mask = mask
+        }
 
-        public init(
-            samples: MLXArray
-        ) {
-            self.samples = samples
+        public init(samples: MLXArray) {
+            self.init(features: samples)
         }
     }
 
