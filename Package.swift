@@ -58,7 +58,7 @@ let package = Package(
         .default(enabledTraits: ["FoundationModelsIntegration"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/PrismML-Eng/mlx-swift", branch: "prism"),
+        .package(url: "https://github.com/dcartman/mlx-swift", branch: "dcPrism"),
         // 602.0.0 floor: swift.org publishes signed prebuilt swift-syntax artifacts only for
         // >= 602 tags on current toolchains; a 600.x/601.x resolution falls back to the full
         // source compile of swift-syntax.
